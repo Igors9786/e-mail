@@ -1,0 +1,124 @@
+import sqlite3
+from hashlib import sha256
+from datetime import datetime
+
+def initialize_db():
+    conn = sqlite3.connect('library.db')
+    c = conn.cursor()
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS grāmatas
+                 (ID INTEGER PRIMARY KEY, nosaukums TEXT, autors TEXT, izdošanas_gads INTEGER)''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS lietotāji
+                 (ID INTEGER PRIMARY KEY, vārds TEXT, e_pasts TEXT UNIQUE, parole_hash TEXT)''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS aizņemšanās_reģistri
+                 (ID INTEGER PRIMARY KEY, grāmatas_ID INTEGER, lietotāja_ID INTEGER, 
+                  aizņemšanas_datums TEXT, atgriešanas_datums TEXT,
+                  FOREIGN KEY(grāmatas_ID) REFERENCES grāmatas(ID),
+                  FOREIGN KEY(lietotāja_ID) REFERENCES lietotāji(ID))''')
+    
+    conn.commit()
+    conn.close()
+
+def register_user(vārds, e_pasts, parole):
+    conn = sqlite3.connect('library.db')
+    c = conn.cursor()
+    parole_hash = sha256(parole.encode('utf-8')).hexdigest()
+    try:
+        c.execute("INSERT INTO lietotāji (vārds, e_pasts, parole_hash) VALUES (?, ?, ?)", 
+                  (vārds, e_pasts, parole_hash))
+        conn.commit()
+        print("Lietotājs veiksmīgi reģistrēts.")
+    except sqlite3.IntegrityError:
+        print("E-pasts jau ir reģistrēts.")
+    conn.close()
+
+def authenticate_user(e_pasts, parole):
+    conn = sqlite3.connect('library.db')
+    c = conn.cursor()
+    c.execute("SELECT parole_hash FROM lietotāji WHERE e_pasts = ?", (e_pasts,))
+    result = c.fetchone()
+    conn.close()
+    if result and sha256(parole.encode('utf-8')).hexdigest() == result[0]:
+        return True
+    else:
+        return False
+
+def add_book(nosaukums, autors, izdošanas_gads):
+    conn = sqlite3.connect('library.db')
+    c = conn.cursor()
+    c.execute("INSERT INTO grāmatas (nosaukums, autors, izdošanas_gads) VALUES (?, ?, ?)", 
+              (nosaukums, autors, izdošanas_gads))
+    conn.commit()
+    conn.close()
+    print("Grāmata veiksmīgi pievienota.")
+
+def search_books(search_term):
+    conn = sqlite3.connect('library.db')
+    c = conn.cursor()
+    c.execute("SELECT * FROM grāmatas WHERE nosaukums LIKE ? OR autors LIKE ? OR izdošanas_gads LIKE ?", 
+              ('%'+search_term+'%', '%'+search_term+'%', '%'+search_term+'%'))
+    results = c.fetchall()
+    conn.close()
+    for book in results:
+        print(book)
+
+def borrow_book(lietotāja_ID, grāmatas_ID):
+    conn = sqlite3.connect('library.db')
+    c = conn.cursor()
+    aizņemšanas_datums = datetime.now().strftime('%Y-%m-%d')
+    c.execute("INSERT INTO aizņemšanās_reģistri (grāmatas_ID, lietotāja_ID, aizņemšanas_datums) VALUES (?, ?, ?)", 
+              (grāmatas_ID, lietotāja_ID, aizņemšanas_datums))
+    conn.commit()
+    conn.close()
+    print("Grāmata veiksmīgi aizņemta.")
+
+def return_book(reģistra_ID):
+    conn = sqlite3.connect('library.db')
+    c = conn.cursor()
+    atgriešanas_datums = datetime.now().strftime('%Y-%m-%d')
+    c.execute("UPDATE aizņemšanās_reģistri SET atgriešanas_datums = ? WHERE ID = ?", 
+              (atgriešanas_datums, reģistra_ID))
+    conn.commit()
+    conn.close()
+    print("Grāmata veiksmīgi atgriezta.")
+
+def main_menu():
+    while True:
+        print("\nGalvenā izvēlne:")
+        print("1. Reģistrēt jaunu lietotāju")
+        print("2. Autentificēties")
+        print("3. Meklēt grāmatas")
+        print("4. Aizņemties grāmatu")
+        print("5. Atgriezt grāmatu")
+        print("6. Pievienot grāmatu")
+        print("7. Iziet")
+
+        choice = input("Ievadiet izvēles numuru: ")
+        if choice == '1':
+            vārds = input("Ievadiet vārdu: ")
+            e_pasts = input("Ievadiet e-pastu: ")
+            parole = input("Ievadiet paroli: ")
+            register_user(vārds, e_pasts, parole)
+        elif choice == '2':
+            e_pasts = input("Ievadiet e-pastu: ")
+            parole = input("Ievadiet paroli: ")
+            if authenticate_user(e_pasts, parole):
+                print("Autentifikācija veiksmīga.")
+            else:
+                print("Autentifikācija neveiksmīga.")
+        elif choice == '3':
+            search_term = input("Ievadiet meklēšanas kritērijus: ")
+            search_books(search_term)
+        elif choice == '6':
+            nosaukums = input("Ievadiet grāmatas nosaukumu: ")
+            autors = input("Ievadiet autora vārdu: ")
+            izdošanas_gads = input("Ievadiet izdošanas gadu: ")
+            add_book(nosaukums, autors, izdošanas_gads)
+        elif choice == '7':
+            break
+
+if __name__ == '__main__':
+    initialize_db()
+    main_menu()
